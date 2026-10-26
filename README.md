@@ -38,7 +38,7 @@ Telegram  <-->  Hermes Agent  -->  9Router (127.0.0.1:20128)  -->  AI providers
 
 - Hermes talks to 9Router over `localhost` using the OpenAI-compatible API.
 - 9Router holds your provider accounts and API keys and can fall back between models.
-- Caddy exposes **only the dashboard** over HTTPS. The 9Router port itself is never opened to the internet.
+- Caddy forwards HTTPS traffic to the 9Router web service. Because the service may also expose API routes, protect the public domain with an additional access-control layer (the example below uses Caddy Basic Authentication). The 9Router port itself must remain bound to `127.0.0.1` and must never be opened directly to the internet.
 
 ## 2. Requirements
 
@@ -73,7 +73,10 @@ ufw status
 ```bash
 apt install -y nodejs npm
 node -v
+node -e 'const [major] = process.versions.node.split(".").map(Number); if (major < 20) { console.error("Node.js 20+ is required; install a supported Node.js release before continuing."); process.exit(1); }'
 ```
+
+If the version check fails, do not continue with the Ubuntu default package; install a supported Node.js 20+ release using the official Node.js installation instructions for your Ubuntu version.
 
 **4.2 Install 9Router**
 
@@ -112,7 +115,7 @@ After=network.target
 
 [Service]
 EnvironmentFile=/etc/9router/env
-ExecStart=/usr/local/bin/9router --host 127.0.0.1 --port 20128 --no-browser --skip-update --log
+ExecStart=/usr/bin/env 9router --host 127.0.0.1 --port 20128 --no-browser --skip-update --log
 Restart=always
 RestartSec=5
 
@@ -140,17 +143,31 @@ The `ss` output must show `127.0.0.1:20128`, **not** `0.0.0.0:20128`.
 getent hosts ai.example.com
 ```
 
-**5.2 Install Caddy and configure the reverse proxy** (replace the domain):
+**5.2 Install Caddy and add an authentication layer** (replace the domain):
+
+First generate a password hash. Choose a long, unique password and do not reuse the 9Router dashboard password:
+
+```bash
+caddy hash-password --plaintext 'REPLACE_WITH_A_LONG_UNIQUE_PASSWORD'
+```
+
+Copy the resulting hash, then configure Caddy. Replace `PASTE_HASH_OUTPUT_HERE` with the complete hash **before** reloading Caddy:
 
 ```bash
 apt install -y caddy
 cat > /etc/caddy/Caddyfile <<'EOF'
 ai.example.com {
+    basic_auth {
+        admin PASTE_HASH_OUTPUT_HERE
+    }
     reverse_proxy 127.0.0.1:20128
 }
 EOF
+caddy validate --config /etc/caddy/Caddyfile
 systemctl reload caddy || systemctl restart caddy
 ```
+
+This protects the public web service with a second authentication layer. Your local Hermes connection to `http://127.0.0.1:20128/v1` is unaffected. If you need remote API access, use a separately designed, authenticated access path rather than removing this protection.
 
 **5.3 Verify.** Caddy obtains a TLS certificate automatically (this can take up to a minute):
 
@@ -283,4 +300,4 @@ Issues and pull requests are welcome. Please never include real IP addresses, do
 
 ## License
 
-Documentation released under the MIT License (add a `LICENSE` file to your repository). The tools referenced here are distributed under their own licenses.
+Documentation is released under the MIT License; see [`LICENSE`](LICENSE). The tools referenced here are distributed under their own licenses.
