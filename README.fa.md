@@ -89,9 +89,12 @@ ufw status
 ```bash
 apt install -y nodejs npm
 node -v
+node -e 'const [major] = process.versions.node.split(".").map(Number); if (major < 20) { console.error("Node.js 20+ is required; install a supported Node.js release before continuing."); process.exit(1); }'
 ```
 
 <div dir="rtl">
+
+اگر بررسی نسخه خطا داد، با بسته پیش‌فرض اوبونتو ادامه ندهید؛ ابتدا طبق راهنمای رسمی Node.js، نسخه پشتیبانی‌شده ۲۰ یا بالاتر را برای نسخه اوبونتوی خود نصب کنید.
 
 **۴.۲ نصب `9Router`**
 
@@ -140,7 +143,7 @@ After=network.target
 
 [Service]
 EnvironmentFile=/etc/9router/env
-ExecStart=/usr/local/bin/9router --host 127.0.0.1 --port 20128 --no-browser --skip-update --log
+ExecStart=/usr/bin/env 9router --host 127.0.0.1 --port 20128 --no-browser --skip-update --log
 Restart=always
 RestartSec=5
 
@@ -164,7 +167,7 @@ ss -tlnp | grep 20128
 
 <div dir="rtl">
 
-خروجی `ss` باید `127.0.0.1:20128` را نشان بدهد، **نه** `0.0.0.0:20128`.
+خروجی `ss` باید `127.0.0.1:20128` را نشان بدهد، **نه** `0.0.0.0:20128`. سرویس وب 9Router ممکن است علاوه بر داشبورد، مسیرهای API را هم ارائه کند؛ بنابراین دامنه عمومی را با لایه احراز هویت اضافی محافظت کنید. درگاه 9Router نباید مستقیماً در اینترنت باز باشد.
 
 ## ۵. انتشار داشبورد با HTTPS
 
@@ -178,7 +181,19 @@ getent hosts ai.example.com
 
 <div dir="rtl">
 
-**۵.۲ نصب `Caddy` و تنظیم `reverse proxy`** (دامنه را عوض کنید):
+**۵.۲ نصب `Caddy` و افزودن لایه احراز هویت** (دامنه را عوض کنید):
+
+ابتدا یک هش رمز بسازید. از رمز طولانی و منحصربه‌فرد استفاده کنید و رمز داشبورد 9Router را دوباره به کار نبرید:
+
+</div>
+
+```bash
+caddy hash-password --plaintext 'REPLACE_WITH_A_LONG_UNIQUE_PASSWORD'
+```
+
+<div dir="rtl">
+
+خروجی هش را کپی کنید و در پیکربندی زیر، مقدار `PASTE_HASH_OUTPUT_HERE` را با هش کامل جایگزین کنید. **پیش از بارگذاری مجدد Caddy حتماً این جایگزینی را انجام دهید.**
 
 </div>
 
@@ -186,11 +201,19 @@ getent hosts ai.example.com
 apt install -y caddy
 cat > /etc/caddy/Caddyfile <<'EOF'
 ai.example.com {
+    basic_auth {
+        admin PASTE_HASH_OUTPUT_HERE
+    }
     reverse_proxy 127.0.0.1:20128
 }
 EOF
+caddy validate --config /etc/caddy/Caddyfile
 systemctl reload caddy || systemctl restart caddy
 ```
+
+<div dir="rtl">
+
+این تنظیم، سرویس وب عمومی را با یک لایه احراز هویت دوم محافظت می‌کند. اتصال محلی Hermes به `http://127.0.0.1:20128/v1` تحت تأثیر قرار نمی‌گیرد. اگر به دسترسی API از راه دور نیاز دارید، به‌جای حذف این محافظت، مسیر دسترسی جداگانه و احراز هویت‌شده طراحی کنید.
 
 <div dir="rtl">
 
@@ -379,6 +402,6 @@ apt update && apt upgrade -y       # system updates
 
 ## لایسنس
 
-مستندات تحت لایسنس `MIT` منتشر می‌شود (یک فایل `LICENSE` به مخزن اضافه کنید). ابزارهای نام‌برده‌شده لایسنس مخصوص خودشان را دارند.
+مستندات تحت لایسنس `MIT` منتشر می‌شود؛ متن مجوز در فایل [`LICENSE`](LICENSE) قرار دارد. ابزارهای نام‌برده‌شده لایسنس مخصوص خودشان را دارند.
 
 </div>
